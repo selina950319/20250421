@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <title>程詩蓉的互動選單</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.6.0/p5.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+    }
+    #webview {
+      position: absolute;
+      top: 100px;
+      left: 50px;
+      width: 80%;
+      height: 70%;
+      border: none;
+      display: none;
+      box-shadow: 0 0 20px #a2d2ff;
+      border-radius: 12px;
+      z-index: 10;
+    }
+    #closeBtn {
+      position: absolute;
+      top: 60px;
+      right: 60px;
+      background-color: #ffafcc;
+      color: #000;
+      border: none;
+      font-size: 20px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      display: none;
+      z-index: 11;
+    }
+    #closeBtn:hover {
+      background-color: #b9fbc0;
+      color: #000;
+    }
+  </style>
+</head>
+<body>
+  <button id="closeBtn" onclick="hideIframe()">✖ 離開</button>
+  <iframe id="webview"></iframe>
+
+  <script>
+    let stars = [];
+    let planets = [];
+    let menuItems = ["首頁", "自我介紹", "作品集", "測驗卷", "教學影片"];
+    let submenuItems = ["第一週作業", "第二週作業", "第三週作業", "第四週作業"];
+    let submenuLocked = false;
+    let showSubmenu = false;
+    let selectedSubmenu = null;
+    let selectedMain = null;
+    let menuFontSize = 40;
+    let menuBoxHeight = 50;
+    let menuX = 20, menuY;
+
+    function setup() {
+      createCanvas(windowWidth, windowHeight);
+
+      for (let i = 0; i < 300; i++) {
+        stars.push({
+          x: random(width),
+          y: random(height),
+          baseSize: random(1, 2)
+        });
+      }
+
+      let maxAttempts = 1000;
+      while (planets.length < 6 && maxAttempts > 0) {
+        let newPlanet = {
+          x: random(100, width - 350),
+          y: random(100, height - 100),
+          r: random(50, 80),
+          angle: random(TWO_PI),
+          speed: random(0.001, 0.003),
+          baseColor: color(random(150, 255), random(100, 255), random(100, 255)),
+          hasRing: random() > 0.5,
+          spots: int(random(3, 8))
+        };
+
+        let tooClose = false;
+        for (let p of planets) {
+          if (dist(newPlanet.x, newPlanet.y, p.x, p.y) < newPlanet.r + p.r + 80) {
+            tooClose = true;
+            break;
+          }
+        }
+
+        if (!tooClose) planets.push(newPlanet);
+        maxAttempts--;
+      }
+
+      menuY = 20;
+      textFont('sans-serif');
+    }
+
+    function draw() {
+      background(10);
+      drawStars();
+      drawPlanets();
+      drawMenu();
+      drawSelectedContent();
+    }
+
+    function drawStars() {
+      noStroke();
+      fill(255);
+      for (let star of stars) {
+        let d = dist(star.x, star.y, mouseX, mouseY);
+        let size = map(d, 0, width / 2, 10, star.baseSize);
+        ellipse(star.x, star.y, size);
+      }
+    }
+
+    function drawPlanets() {
+      for (let p of planets) {
+        push();
+        translate(p.x, p.y);
+        rotate(p.angle);
+
+        for (let i = p.r; i > 0; i--) {
+          let inter = map(i, 0, p.r, 0, 1);
+          fill(lerpColor(p.baseColor, color(0), inter));
+          ellipse(0, 0, i * 2);
+        }
+
+        fill(255, 80);
+        for (let i = 0; i < p.spots; i++) {
+          let a = random(TWO_PI);
+          let d = random(p.r * 0.2, p.r * 0.9);
+          ellipse(cos(a) * d, sin(a) * d, random(4, 10));
+        }
+
+        if (p.hasRing) {
+          noFill();
+          stroke(255, 100);
+          strokeWeight(2);
+          ellipse(0, 0, p.r * 2.2, p.r * 1.1);
+        }
+
+        pop();
+        p.angle += p.speed;
+      }
+    }
+
+    function drawMenu() {
+      textSize(menuFontSize);
+      textAlign(LEFT, CENTER);
+
+      for (let i = 0; i < menuItems.length; i++) {
+        let y = menuY + i * (menuBoxHeight + 10);
+
+        let isHovered = mouseX > menuX && mouseX < menuX + 280 && mouseY > y && mouseY < y + menuBoxHeight;
+        let boxColor = isHovered ? '#b9fbc0' : '#ffafcc';
+        let textColor = isHovered ? '#cfbaf0' : '#a2d2ff';
+
+        fill(boxColor);
+        noStroke();
+        rect(menuX, y, 280, menuBoxHeight, 8);
+        fill(textColor);
+        text(menuItems[i], menuX + 10, y + menuBoxHeight / 2);
+
+        // 如果是作品集，畫出子選單在右側避免重疊
+        if ((submenuLocked || showSubmenu) && menuItems[i] === "作品集") {
+          for (let j = 0; j < submenuItems.length; j++) {
+            let sy = y + (j + 1) * (menuBoxHeight + 5);
+            let sx = menuX + 300; // 與主選單有間距不蓋住
+            let sw = 260;
+            let sh = menuBoxHeight;
+
+            let isSubHovered = mouseX > sx && mouseX < sx + sw && mouseY > sy && mouseY < sy + sh;
+            let subBoxColor = isSubHovered ? '#b9fbc0' : '#ffafcc';
+            let subTextColor = isSubHovered ? '#cfbaf0' : '#a2d2ff';
+
+            fill(subBoxColor);
+            rect(sx, sy, sw, sh, 8);
+            fill(subTextColor);
+            text(submenuItems[j], sx + 10, sy + sh / 2);
+          }
+        }
+      }
+    }
+
+    function drawSelectedContent() {
+      if (selectedMain === "自我介紹") {
+        fill('#a2d2ff');
+        textSize(36);
+        textAlign(CENTER, CENTER);
+        text("大家好，我是程詩蓉 😊", width / 2, height / 2 + 200);
+      }
+      if (selectedSubmenu !== null) {
+        fill('#a2d2ff');
+        textSize(36);
+        textAlign(CENTER, CENTER);
+        text(`你選擇了：${selectedSubmenu}`, width / 2, height / 2 + 200);
+      }
+    }
+
+    function mousePressed() {
+      for (let i = 0; i < menuItems.length; i++) {
+        let y = menuY + i * (menuBoxHeight + 10);
+        if (mouseX > menuX && mouseX < menuX + 280 && mouseY > y && mouseY < y + menuBoxHeight) {
+          let item = menuItems[i];
+          selectedMain = item;
+
+          if (item === "作品集") {
+            submenuLocked = !submenuLocked;
+            showSubmenu = submenuLocked;
+          }
+
+          if (item === "首頁") {
+            openInIframe("https://hackmd.io/Nbo2mTD5TIqSI8oDgiFHgQ");
+          } else if (item === "教學影片") {
+            openInIframe("https://cfchen58.synology.me/%E7%A8%8B%E5%BC%8F%E8%A8%AD%E8%A8%882024/B2/week1/20250217_104300.mp4");
+          } else if (item === "自我介紹") {
+            hideIframe();
+          } else if (item === "測驗卷") {
+            openInIframe("https://selina950319.github.io/0415-1/");
+          }
+          return;
+        }
+      }
+
+      if (submenuLocked) {
+        for (let j = 0; j < submenuItems.length; j++) {
+          let sy = menuY + 2 * (menuBoxHeight + 10) + (j + 1) * (menuBoxHeight + 5);
+          let sx = menuX + 300;
+          let sw = 260;
+          let sh = menuBoxHeight;
+
+          if (mouseX > sx && mouseX < sx + sw && mouseY > sy && mouseY < sy + sh) {
+            selectedSubmenu = submenuItems[j];
+            if (j === 0) openInIframe("https://hackmd.io/KRjjXuzbS-CJz-1mqB5hXA");
+            if (j === 1) openInIframe("https://selina950319.github.io/20250310/");
+            if (j === 2) openInIframe("https://selina950319.github.io/20250317/");
+            if (j === 3) openInIframe("https://selina950319.github.io/20250324/");
+            return;
+          }
+        }
+      }
+    }
+
+    function openInIframe(url) {
+      const iframe = document.getElementById("webview");
+      const closeBtn = document.getElementById("closeBtn");
+      iframe.src = url;
+      iframe.style.display = "block";
+      closeBtn.style.display = "block";
+    }
+
+    function hideIframe() {
+      const iframe = document.getElementById("webview");
+      const closeBtn = document.getElementById("closeBtn");
+      iframe.style.display = "none";
+      closeBtn.style.display = "none";
+      iframe.src = "";
+    }
+  </script>
+</body>
+</html>
